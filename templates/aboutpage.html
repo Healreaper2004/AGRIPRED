@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AGRIPRED - Empowering Farmers with AI</title>
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='aboutpage.css') }}">
+</head>
+<body>
+  <!-- Navbar -->
+  <header>
+    <div class="navbar">
+      <div class="logo">
+        <a href="{{ url_for('index') }}" style="text-decoration:none; color:inherit;">AGRIPRED</a>
+      </div>
+      <nav>
+        <a href="{{ url_for('about') }}">About</a>
+        <a href="{{ url_for('features') }}">Features</a>
+        <a href="{{ url_for('contact') }}">Contact</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero-section">
+    <div class="hero-overlay">
+      <div class="hero-content">
+        <h1>Empowering Farmers with<br>AI</h1>
+        <p>Our mission is to make disease detection simple, accurate, and<br>accessible for every farmer.</p>
+        <a href="#" class="hero-btn">Learn Our Story <span class="material-icons" style="vertical-align:middle;font-size:1.1em;">arrow_forward</span></a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Our Story Section -->
+  <section class="story-section">
+    <h2>Our Story</h2>
+    <div class="story-content">
+      <div class="story-text">
+        <h3>The Problem We Solve</h3>
+        <p>
+          Every year, millions of farmers lose significant portions of their crops to diseases that could have been prevented or treated if detected early. Traditional methods of disease identification often require expert knowledge that isn’t readily available to farmers in remote areas.<br><br>
+          We recognized that technology could bridge this gap. By combining artificial intelligence with agricultural expertise, we created Agripred to democratize access to crop disease detection and treatment recommendations.<br><br>
+          Our platform empowers farmers to take immediate action, potentially saving entire harvests and securing their livelihoods.
+        </p>
+      </div>
+      <div class="story-image-block">
+        <div class="story-image">
+          <img src="image 1.jpg" alt="Farmer in field">
+          <div class="founded-badge">
+            <span>2025</span><br>Founded
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Values Section -->
+  <section class="values-section">
+    <h2>What We Stand For</h2>
+    <p class="values-desc">
+      Our core values guide everything we do, from product development to farmer support.
+    </p>
+    <div class="values-cards">
+      <div class="value-card">
+        <div class="value-icon"><span class="material-icons">lock_open</span></div>
+        <h3>Accessibility</h3>
+        <p>Easy-to-use tools, designed for farmers of every background, ensuring everyone can leverage the power of technology.</p>
+      </div>
+      <div class="value-card">
+        <div class="value-icon"><span class="material-icons">lightbulb</span></div>
+        <h3>Innovation</h3>
+        <p>Cutting-edge AI powered by extensive research and practical agricultural workflows.</p>
+      </div>
+      <div class="value-card">
+        <div class="value-icon"><span class="material-icons">verified_user</span></div>
+        <h3>Trust</h3>
+        <p>All recommendations are based on verified and scientific research validated by agricultural specialists.</p>
+      </div>
+      <div class="value-card">
+        <div class="value-icon"><span class="material-icons">eco</span></div>
+        <h3>Sustainability</h3>
+        <p>Reducing crop losses and improving yields, while encouraging environmentally responsible farming practices.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="footer-content">
+      <div class="footer-col">
+        <h4>AGRIPRED</h4>
+        <p>Empowering farmers with AI-driven crop disease detection and prevention solutions.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Features</h4>
+        <ul>
+          <li>Disease Detection</li>
+          <li>Treatment Recommendations</li>
+          <li>AI Chat Support</li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Company</h4>
+        <ul>
+          <li><a href="{{ url_for('about') }}" style="color: inherit;">About</a></li>
+          <li><a href="{{ url_for('contact') }}" style="color: inherit;">Contact</a></li>
+          <li>Privacy Policy</li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Connect</h4>
+        <ul>
+          <li>support@agripred.com</li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      © 2025 Agripred. All rights reserved.
+    </div>
+  </footer>
+</body>
+</html>

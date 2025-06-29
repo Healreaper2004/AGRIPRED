@@ -1,0 +1,9 @@
+Flask==2.3.3
+torch==2.2.2
+torchvision==0.17.2
+Pillow==10.3.0
+requests==2.31.0
+flask-cors==4.0.0
+python-dotenv==1.0.1
+
+Add python-dotenv if you're using .env files for the Gemini API key.
