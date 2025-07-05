@@ -19,17 +19,17 @@ AGRIPRED is an AI-based web application that helps farmers detect diseases in pa
 ## 🧠 Tech Stack
 
 - **Frontend**: HTML5, CSS3, JavaScript  
-- **Backend**: Python with Gradio  
+- **Backend**: Python with Flask  
 - **AI Model**: PyTorch + ResNet50 (Transfer Learning)  
 - **API**: Google Gemini API for chatbot  
-- **Deployment**: Hugging Face Spaces (Gradio SDK)
+- **Deployment**: Render.com (Flask app + custom HTML/CSS)
 
 ## 🧪 Getting Started (Local)
 
 ```bash
 # 1. Clone this repository:
-git clone https://github.com/your-username/agripred.git
-cd agripred
+git clone https://github.com/Healreaper2004/AGRIPRED.git
+cd AGRIPRED
 
 # 2. Create and activate virtual environment
 python -m venv venv
@@ -39,7 +39,7 @@ venv\Scripts\activate  # On Windows
 pip install -r requirements.txt
 
 # 4. Place model file
-# Download paddy_model.pth from Hugging Face or Google Drive and place in `model/` folder
+# Download or copy paddy_model.pth into the `model/` folder
 
 # 5. Add Gemini API key
 # Create a `.env` file and add:
