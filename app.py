@@ -123,5 +123,8 @@ def predict():
         print("❌ File not allowed:", file.filename)
         return jsonify({"error": "Unsupported file type"}), 400
 
+import os
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
