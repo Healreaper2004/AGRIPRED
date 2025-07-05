@@ -1,14 +1,3 @@
----
-title: AGRIPRED - Paddy Disease Detector
-emoji: 🌾
-colorFrom: green
-colorTo: lime
-sdk: gradio
-sdk_version: "4.22.0"
-app_file: app.py
-pinned: false
----
-
 # 🌾 AGRIPRED – AI-Powered Paddy Disease Detection
 
 AGRIPRED is an AI-based web application that helps farmers detect diseases in paddy crops through image uploads and provides tailored recommendations via a chatbot powered by Google's Gemini API.
