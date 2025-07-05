@@ -31,7 +31,7 @@ transform = transforms.Compose([
 ])
 
 model_path = os.path.join("model", "paddy_model.pth")
-model = models.resnet50(weights=None)
+model = models.resnet18(weights=None)
 model.fc = torch.nn.Sequential(
     torch.nn.Linear(model.fc.in_features, 256),
     torch.nn.ReLU(),
