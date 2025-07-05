@@ -4,17 +4,25 @@ from PIL import Image
 import torch
 from torchvision import transforms, models
 import os
+import logging
 from dotenv import load_dotenv
 from cures import predefined_cures, ask_gemini_short, ask_gemini_detailed
 
 app = Flask(__name__)
 CORS(app)
 
+# ✅ Logging
+logging.basicConfig(level=logging.INFO)
+
+# ✅ Upload folder setup
 UPLOAD_FOLDER = 'static/uploads'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png'}
 
+# ✅ Environment
 load_dotenv()
 
+# ✅ Device & Class Config
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class_names = [
     'Rice_bacterial_leaf_blight', 'Rice_bacterial_leaf_streak', 'Rice_bacterial_panicle_blight',
@@ -22,6 +30,7 @@ class_names = [
     'Rice_healthy', 'Rice_hispa', 'Rice_tungro'
 ]
 
+# ✅ Transform
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.CenterCrop(224),
@@ -30,6 +39,7 @@ transform = transforms.Compose([
                          [0.229, 0.224, 0.225])
 ])
 
+# ✅ Load model
 model_path = os.path.join("model", "paddy_model.pth")
 model = models.resnet18(weights=None)
 model.fc = torch.nn.Sequential(
@@ -50,6 +60,7 @@ except Exception as e:
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+# ✅ ROUTES
 @app.route("/", methods=["GET"])
 def home():
     return render_template("homepage.html")
@@ -65,6 +76,10 @@ def contact():
 @app.route("/features", methods=["GET"])
 def features():
     return render_template("featurepage.html")
+
+@app.route("/ping")
+def ping():
+    return jsonify({"status": "ok"})
 
 @app.route("/predict", methods=["POST"])
 def predict():
@@ -116,6 +131,7 @@ def predict():
                 "details": details,
                 "image_path": filepath
             })
+
         except Exception as e:
             print("🔥 Prediction error:", e)
             return jsonify({"error": "Could not analyze the image."}), 500
@@ -123,10 +139,7 @@ def predict():
         print("❌ File not allowed:", file.filename)
         return jsonify({"error": "Unsupported file type"}), 400
 
-import os
-@app.route("/ping")
-def ping():
-    return jsonify({"status": "ok"})
+# ✅ Startup
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
