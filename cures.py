@@ -37,24 +37,19 @@ predefined_cures = {
 
 # Internal function to query Gemini API
 def _query_gemini(prompt, max_tokens=250):
-    url = f"https://generativelanguage.googleapis.com/v1/models/{MODEL_NAME}:generate"
-    headers = {
-        "Authorization": f"Bearer {API_KEY}",
-        "Content-Type": "application/json"
-    }
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent?key={API_KEY}"
+    headers = {"Content-Type": "application/json"}
     body = {
-        "prompt": {"text": prompt},
-        "temperature": 0.5,
-        "max_output_tokens": max_tokens,
-        "candidate_count": 1
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.5, "maxOutputTokens": max_tokens}
     }
 
     try:
         response = requests.post(url, headers=headers, json=body, timeout=15)
         response.raise_for_status()
         data = response.json()
-        # New API returns output in candidates[0]['output']
-        return data["candidates"][0]["output"].strip()
+        # API returns output in candidates[0]["content"][0]["text"]
+        return data["candidates"][0]["content"][0]["text"].strip()
     except Exception as e:
         return f"⚠️ Gemini error: {e}"
 
