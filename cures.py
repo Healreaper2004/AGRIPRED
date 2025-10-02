@@ -2,7 +2,7 @@ import requests
 import os
 
 # Gemini API configuration
-API_KEY = os.environ.get("GEMINI_API_KEY", "YOUR_API_KEY_HERE")  # Replace or set in env vars
+API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyDPzZI_59PiB5hNKZdDpEMNa5M9H0cedpQ")  # Replace or set in env vars
 MODEL_NAME = "gemini-1.5-flash"  # Confirm in Google Cloud console
 
 # Predefined short cures
