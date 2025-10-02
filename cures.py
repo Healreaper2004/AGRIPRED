@@ -1,7 +1,7 @@
 import requests
 
 # Gemini API configuration
-API_KEY = "AIzaSyB37HaBUFgvD9JfICPgSL2Ck5HUvXCjhHE"
+API_KEY = "AIzaSyDPzZI_59PiB5hNKZdDpEMNa5M9H0cedpQ"
 MODEL_NAME = "gemini-1.5-flash"
 
 # Predefined short cures
