@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, redirect, url_for, jsonify
+from flask import Flask, request, render_template, jsonify
 from flask_cors import CORS
 from PIL import Image
 import torch
@@ -8,21 +8,22 @@ import logging
 from dotenv import load_dotenv
 from cures import predefined_cures, ask_gemini_short, ask_gemini_detailed
 
+# ✅ App setup
 app = Flask(__name__)
 CORS(app)
 
 # ✅ Logging
 logging.basicConfig(level=logging.INFO)
 
-# ✅ Upload folder setup
-UPLOAD_FOLDER = 'static/uploads'
+# ✅ Upload folder
+UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'static', 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png'}
 
-# ✅ Environment
+# ✅ Environment variables
 load_dotenv()
 
-# ✅ Device & Class Config
+# ✅ Device & class names
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class_names = [
     'Rice_bacterial_leaf_blight', 'Rice_bacterial_leaf_streak', 'Rice_bacterial_panicle_blight',
@@ -30,7 +31,7 @@ class_names = [
     'Rice_healthy', 'Rice_hispa', 'Rice_tungro'
 ]
 
-# ✅ Transform
+# ✅ Image transform
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.CenterCrop(224),
@@ -40,7 +41,7 @@ transform = transforms.Compose([
 ])
 
 # ✅ Load model
-model_path = os.path.join("model", "paddy_model.pth")
+model_path = os.path.join(os.path.dirname(__file__), "model", "paddy_model.pth")
 model = models.resnet18(weights=None)
 model.fc = torch.nn.Sequential(
     torch.nn.Linear(model.fc.in_features, 256),
@@ -57,10 +58,11 @@ try:
 except Exception as e:
     print("❌ Error loading model:", e)
 
+# ✅ Helpers
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# ✅ ROUTES
+# ✅ Routes
 @app.route("/", methods=["GET"])
 def home():
     return render_template("homepage.html")
@@ -77,27 +79,23 @@ def contact():
 def features():
     return render_template("featurepage.html")
 
-@app.route("/ping")
+@app.route("/ping", methods=["GET"])
 def ping():
     return jsonify({"status": "ok"})
 
 @app.route("/predict", methods=["POST"])
 def predict():
     if "image" not in request.files:
-        print("❌ No image part in the request")
         return jsonify({"error": "No image part"}), 400
 
     file = request.files["image"]
     if file.filename == '':
-        print("❌ No file selected")
         return jsonify({"error": "No file selected"}), 400
 
     if file and allowed_file(file.filename):
         filepath = os.path.join(UPLOAD_FOLDER, file.filename)
         try:
             file.save(filepath)
-            print("✅ Image saved at:", filepath)
-
             image = Image.open(filepath).convert("RGB")
             image_tensor = transform(image).unsqueeze(0).to(device)
 
@@ -109,21 +107,20 @@ def predict():
             predicted_class = class_names[pred.item()]
             confidence = round(probs[0][pred.item()].item() * 100, 2)
 
+            # ✅ Cure
             try:
                 cure = predefined_cures.get(predicted_class)
                 if not isinstance(cure, str):
                     cure = str(ask_gemini_short(predicted_class))
-            except Exception as e:
-                print("⚠️ Cure error:", e)
+            except:
                 cure = "Cure info unavailable"
 
+            # ✅ Detailed info
             try:
                 details = str(ask_gemini_detailed(predicted_class))
-            except Exception as e:
-                print("⚠️ Details error:", e)
+            except:
                 details = "Details not available"
 
-            print("✅ Prediction complete")
             return jsonify({
                 "class": predicted_class,
                 "confidence": confidence,
@@ -136,10 +133,6 @@ def predict():
             print("🔥 Prediction error:", e)
             return jsonify({"error": "Could not analyze the image."}), 500
     else:
-        print("❌ File not allowed:", file.filename)
         return jsonify({"error": "Unsupported file type"}), 400
 
-# ✅ Startup
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
+# ✅ Note: No `app.run()` block. Render will use Gunicorn.
