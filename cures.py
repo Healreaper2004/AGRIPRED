@@ -5,6 +5,9 @@ import requests
 API_KEY = os.environ.get("GEMINI_API_KEY")
 MODEL_NAME = "gemini-1.5-flash"
 
+if not API_KEY:
+    print("⚠️ Warning: GEMINI_API_KEY not set. Gemini queries will fail.")
+
 # Predefined short cures
 predefined_cures = {
     "Rice_healthy": "\nRice_healthy is not a disease. No treatment is needed.",
@@ -45,13 +48,25 @@ def _query_gemini(prompt, max_tokens=250):
     }
 
     try:
-        response = requests.post(url, headers=headers, json=body, timeout=15)
+        response = requests.post(url, headers=headers, json=body, timeout=20)
         response.raise_for_status()
         data = response.json()
-        # API returns output in candidates[0]["content"][0]["text"]
-        return data["candidates"][0]["content"][0]["text"].strip()
+
+        # Debug log in case of issues
+        print("🔍 Gemini response:", data)
+
+        # Safely extract text
+        if "candidates" in data and data["candidates"]:
+            candidate = data["candidates"][0]
+            if "content" in candidate and "parts" in candidate["content"]:
+                return candidate["content"]["parts"][0]["text"].strip()
+            elif "content" in candidate and isinstance(candidate["content"], list):
+                return candidate["content"][0].get("text", "").strip()
+
+        return "⚠️ Gemini did not return any text."
+
     except Exception as e:
-        return f"⚠️ Gemini error: {e}"
+        return f"⚠️ Gemini error: {str(e)}"
 
 # Short cures
 def ask_gemini_short(disease_name):
@@ -69,15 +84,15 @@ def ask_gemini_short(disease_name):
 def ask_gemini_detailed(disease_name):
     prompt = (
         f"The disease specified is {disease_name}.\n\n"
-        "1. Cause: Describe the fungal or bacterial cause. Mention the organism name in *italicized asterisks*.\n"
-        "2. Precautions: What are preventive steps to avoid this disease?\n"
-        "3. Cure: Recommended treatment (e.g., fungicides), limited to 60 words total.\n"
-        "Format the response using line breaks between points."
+        "1. Cause: Describe the fungal or bacterial cause. Mention the organism name in italics.\n"
+        "2. Precautions: Preventive steps to avoid this disease.\n"
+        "3. Cure: Recommended treatment (fungicides/insecticides), limited to 60 words.\n"
+        "Format with line breaks between points."
     )
     result = _query_gemini(prompt, max_tokens=200)
     return result or f"Detailed cure for {disease_name} is not available right now."
 
-# Example usage
+# For quick testing
 if __name__ == "__main__":
     disease = "Rice_blast"
     print("Short Cure:\n", ask_gemini_short(disease))
