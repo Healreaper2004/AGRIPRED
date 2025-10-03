@@ -95,9 +95,14 @@ def predict():
     if file and allowed_file(file.filename):
         filepath = os.path.join(UPLOAD_FOLDER, file.filename)
         try:
+            print(f"📸 Saving uploaded file to {filepath}")
             file.save(filepath)
+
             image = Image.open(filepath).convert("RGB")
+            print("✅ Image loaded")
+
             image_tensor = transform(image).unsqueeze(0).to(device)
+            print("✅ Image transformed")
 
             with torch.no_grad():
                 output = model(image_tensor)
@@ -106,19 +111,20 @@ def predict():
 
             predicted_class = class_names[pred.item()]
             confidence = round(probs[0][pred.item()].item() * 100, 2)
+            print(f"✅ Prediction: {predicted_class} ({confidence}%)")
 
-            # ✅ Cure
             try:
                 cure = predefined_cures.get(predicted_class)
                 if not isinstance(cure, str):
                     cure = str(ask_gemini_short(predicted_class))
-            except:
+            except Exception as ce:
+                print("⚠️ Cure error:", ce)
                 cure = "Cure info unavailable"
 
-            # ✅ Detailed info
             try:
                 details = str(ask_gemini_detailed(predicted_class))
-            except:
+            except Exception as de:
+                print("⚠️ Details error:", de)
                 details = "Details not available"
 
             return jsonify({
@@ -132,8 +138,6 @@ def predict():
         except Exception as e:
             print("🔥 Prediction error:", e)
             return jsonify({"error": f"Could not analyze the image: {str(e)}"}), 500
-    else:
-        return jsonify({"error": "Unsupported file type"}), 400
 
 # ✅ Startup block for local/Render with python app.py
 if __name__ == "__main__":
