@@ -131,8 +131,11 @@ def predict():
 
         except Exception as e:
             print("🔥 Prediction error:", e)
-            return jsonify({"error": "Could not analyze the image."}), 500
+            return jsonify({"error": f"Could not analyze the image: {str(e)}"}), 500
     else:
         return jsonify({"error": "Unsupported file type"}), 400
 
-# ✅ Note: No `app.run()` block. Render will use Gunicorn.
+# ✅ Startup block for local/Render with python app.py
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
