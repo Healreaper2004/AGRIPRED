@@ -1,99 +1,125 @@
+# cures.py
 import os
 import requests
 
-# Gemini API configuration
-API_KEY = os.environ.get("GEMINI_API_KEY")
-MODEL_NAME = "gemini-1.5-flash"
+# API key from env (no hard-coded key)
+API_KEY = os.getenv("GEMINI_API_KEY")
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+BASE_URL = None
+if API_KEY:
+    # Stable v1 style endpoint for generativelanguage (example)
+    BASE_URL = f"https://generativelanguage.googleapis.com/v1/models/{MODEL_NAME}:generateContent?key={API_KEY}"
 
-if not API_KEY:
-    print("⚠️ Warning: GEMINI_API_KEY not set. Gemini queries will fail.")
-
-# Predefined short cures
+# Predefined short cures for classes
 predefined_cures = {
-    "Rice_healthy": "\nRice_healthy is not a disease. No treatment is needed.",
-    "Rice_bacterial_panicle_blight": (
-        "\n1. Use certified disease-free seeds and resistant varieties.\n"
-        "2. Avoid excessive nitrogen fertilization.\n"
-        "3. Apply copper-based bactericides if allowed in your region."
-    ),
-    "Rice_blast": (
-        "\n1. Apply tricyclazole or other recommended fungicides.\n"
-        "2. Avoid excessive nitrogen and maintain proper spacing.\n"
-        "3. Grow resistant varieties and rotate crops."
-    ),
-    "Rice_tungro": (
-        "\n1. Remove infected plants immediately.\n"
-        "2. Control green leafhopper vectors using insecticides.\n"
-        "3. Use tungro-resistant rice varieties."
+    "Rice_healthy": (
+        "Rice_healthy is not a disease. Your crop is in good condition. "
+        "Continue with proper irrigation, pest control, and balanced fertilization."
     ),
     "Rice_bacterial_leaf_blight": (
-        "\n1. Use certified seeds and resistant varieties.\n"
-        "2. Avoid water stagnation and apply balanced fertilizers.\n"
-        "3. Spray copper-based bactericides if needed."
+        "1. Use certified disease-free seeds and resistant varieties.\n"
+        "2. Avoid water stagnation and maintain field sanitation.\n"
+        "3. Apply copper-based bactericides such as copper oxychloride if required."
+    ),
+    "Rice_bacterial_leaf_streak": (
+        "1. Use resistant varieties and avoid high nitrogen fertilizers.\n"
+        "2. Ensure proper drainage to reduce humidity.\n"
+        "3. Spray copper-based bactericides as a preventive measure."
+    ),
+    "Rice_bacterial_panicle_blight": (
+        "1. Use certified disease-free seeds and avoid excessive nitrogen use.\n"
+        "2. Improve air circulation and avoid waterlogging.\n"
+        "3. Apply recommended copper-based bactericides at early flowering if needed."
+    ),
+    "Rice_blast": (
+        "1. Apply tricyclazole or other recommended fungicides.\n"
+        "2. Avoid excessive nitrogen fertilization and maintain proper spacing.\n"
+        "3. Grow resistant varieties and rotate crops."
     ),
     "Rice_brown_spot": (
-        "\n1. Apply fungicides like mancozeb.\n"
-        "2. Use potassium-rich fertilizer.\n"
+        "1. Apply fungicides like mancozeb or propiconazole as recommended.\n"
+        "2. Use potassium- and phosphorus-rich fertilizers.\n"
         "3. Improve drainage and avoid nutrient stress."
+    ),
+    "Rice_dead_heart": (
+        "1. Caused by stem borer infestation — apply recommended insecticides like chlorantraniliprole.\n"
+        "2. Remove and destroy affected tillers immediately.\n"
+        "3. Monitor and use pheromone/light traps where available."
+    ),
+    "Rice_downy_mildew": (
+        "1. Remove infected plants and burn residues to avoid spread.\n"
+        "2. Apply fungicides like metalaxyl at early infection.\n"
+        "3. Ensure proper air circulation and avoid dense planting."
+    ),
+    "Rice_hispa": (
+        "1. Spray insecticides such as chlorpyrifos or triazophos at early infestation.\n"
+        "2. Avoid over-fertilization with nitrogen which attracts the pest.\n"
+        "3. Use light traps or manually remove adults from leaves."
+    ),
+    "Rice_tungro": (
+        "1. Remove and destroy infected plants as soon as symptoms appear.\n"
+        "2. Control green leafhopper vectors using appropriate measures.\n"
+        "3. Plant tungro-resistant rice varieties and avoid overlapping crops."
     )
 }
 
-# Internal function to query Gemini API
-def _query_gemini(prompt, max_tokens=250):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent?key={API_KEY}"
-    headers = {"Content-Type": "application/json"}
+# Internal helper to call Gemini (if API key present)
+def _query_gemini(prompt: str, max_tokens: int = 200) -> str:
+    if not BASE_URL:
+        return "Gemini API key not configured. Install GEMINI_API_KEY to enable online responses."
+
     body = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.5, "maxOutputTokens": max_tokens}
+        "generationConfig": {
+            "temperature": 0.4,
+            "topK": 40,
+            "topP": 0.9,
+            "maxOutputTokens": max_tokens
+        }
     }
 
     try:
-        response = requests.post(url, headers=headers, json=body, timeout=20)
-        response.raise_for_status()
-        data = response.json()
-
-        # Debug log in case of issues
-        print("🔍 Gemini response:", data)
-
-        # Safely extract text
-        if "candidates" in data and data["candidates"]:
-            candidate = data["candidates"][0]
-            if "content" in candidate and "parts" in candidate["content"]:
-                return candidate["content"]["parts"][0]["text"].strip()
-            elif "content" in candidate and isinstance(candidate["content"], list):
-                return candidate["content"][0].get("text", "").strip()
-
-        return "⚠️ Gemini did not return any text."
-
+        resp = requests.post(BASE_URL, headers={"Content-Type": "application/json"}, json=body, timeout=20)
+        resp.raise_for_status()
+        data = resp.json()
+        candidates = data.get("candidates", [])
+        if candidates:
+            content = candidates[0].get("content", {})
+            # content might be dict with "parts"
+            parts = content.get("parts") if isinstance(content, dict) else None
+            if parts and isinstance(parts, list) and len(parts) > 0:
+                return parts[0].get("text", "").strip()
+        # fallback: try top-level text fields
+        if isinstance(data, dict):
+            txt = data.get("text") or data.get("content") or None
+            if isinstance(txt, str) and txt.strip():
+                return txt.strip()
+        return "No textual response received from Gemini."
+    except requests.exceptions.RequestException as e:
+        return f"Network error contacting Gemini: {e}"
     except Exception as e:
-        return f"⚠️ Gemini error: {str(e)}"
+        return f"Unexpected error contacting Gemini: {e}"
 
-# Short cures
-def ask_gemini_short(disease_name):
+def ask_gemini_short(disease_name: str) -> str:
     if disease_name in predefined_cures:
         return predefined_cures[disease_name]
-
     prompt = (
-        f"Give 2–3 treatment steps (under 60 words) for plant disease '{disease_name}' "
-        "in clear numbered points. No extra explanation."
+        f"Provide 2–3 concise treatment steps (under 60 words) for the plant disease '{disease_name}'. "
+        "Use numbered points only."
     )
-    result = _query_gemini(prompt, max_tokens=150)
-    return result or f"Treatment info for {disease_name} is not available right now."
+    return _query_gemini(prompt, max_tokens=150)
 
-# Detailed cures
-def ask_gemini_detailed(disease_name):
+def ask_gemini_detailed(disease_name: str) -> str:
     prompt = (
         f"The disease specified is {disease_name}.\n\n"
-        "1. Cause: Describe the fungal or bacterial cause. Mention the organism name in italics.\n"
-        "2. Precautions: Preventive steps to avoid this disease.\n"
-        "3. Cure: Recommended treatment (fungicides/insecticides), limited to 60 words.\n"
-        "Format with line breaks between points."
+        "1. Cause: Explain the fungal, bacterial, or viral cause (mention organism where possible).\n"
+        "2. Precautions: List preventive steps to reduce infection risk.\n"
+        "3. Cure: Describe recommended control measures briefly (under 60 words)."
     )
-    result = _query_gemini(prompt, max_tokens=200)
-    return result or f"Detailed cure for {disease_name} is not available right now."
+    return _query_gemini(prompt, max_tokens=250)
 
-# For quick testing
+# Quick test when run as script
 if __name__ == "__main__":
-    disease = "Rice_blast"
-    print("Short Cure:\n", ask_gemini_short(disease))
-    print("\nDetailed Info:\n", ask_gemini_detailed(disease))
+    test = "Rice_blast"
+    print("Short:", ask_gemini_short(test))
+    print("Detailed:", ask_gemini_detailed(test))

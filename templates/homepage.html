@@ -11,9 +11,9 @@
   <!-- Header Section -->
   <header>
     <div class="navbar">
-        <div class="logo">
-          <a href="{{ url_for('home') }}" style="text-decoration: none; color: inherit;">AGRIPRED</a>
-        </div>
+      <div class="logo">
+        <a href="{{ url_for('home') }}" class="logo-text">AGRIPRED</a>
+      </div>
       <nav>
         <a href="{{ url_for('about') }}">About</a>
         <a href="{{ url_for('features') }}">Features</a>
@@ -28,29 +28,29 @@
   </header>
 
   <!-- Features Section -->
-  <section class="features">
+  <section class="features" id="features">
     <div class="feature-item">
       <div class="icon">&#128269;</div>
       <h3>Disease Detection</h3>
-      <p>Advanced AI technology to identify crop diseases accurately</p>
+      <p>Advanced AI technology to identify crop diseases accurately.</p>
     </div>
     <div class="feature-item">
       <div class="icon">&#128138;</div>
       <h3>Medication Recommendations</h3>
-      <p>Get personalized treatment options for your crops</p>
+      <p>Get personalized treatment options for your crops.</p>
     </div>
     <div class="feature-item">
       <div class="icon">&#128172;</div>
       <h3>AI Chat Assistant</h3>
-      <p>24/7 support for all your agricultural queries</p>
+      <p>24/7 support for all your agricultural queries.</p>
     </div>
   </section>
 
   <!-- Disease Detection Section -->
   <section id="detection" class="disease-detection">
-    <h2>Disease Detection</h2>
+    <h2>Image-Based Disease Detection</h2>
     <div class="detection-buttons">
-      <button class="upload-btn">Upload Image</button>
+      <button id="upload-btn" class="upload-btn">Upload Image</button>
       <input type="file" id="upload-input" accept="image/*" style="display:none;" />
     </div>
 
@@ -61,6 +61,23 @@
     </div>
 
     <p id="prediction-result" style="margin-top: 1em; font-weight: bold;"></p>
+
+    <!-- New Text-Based Prediction Section -->
+    <hr style="margin:40px 0; border:1px dashed #cde0c9;" />
+    <h2>Text-Based Disease Prediction (No Image)</h2>
+    <p style="text-align:center; max-width:600px; margin:auto;">
+      Describe visible symptoms like “brown spots on leaves” or “yellowing and stunted growth”.
+    </p>
+
+    <div id="text-predict-container" style="margin-top: 20px; max-width:600px; margin-left:auto; margin-right:auto;">
+      <textarea id="symptom-text" rows="3" placeholder="Describe your crop symptoms here..." 
+        style="width:100%; padding:10px; border-radius:8px; border:1px solid #dbe7db; resize:vertical;"></textarea>
+      <div style="display:flex; gap:12px; margin-top:10px; justify-content:center;">
+        <button id="text-predict-btn" class="upload-btn">Predict from Text</button>
+        <button id="text-chat-btn" class="upload-btn alt-btn">Ask AI about Symptoms</button>
+      </div>
+      <p id="text-prediction-result" style="margin-top:10px; font-weight:600; color:#234c23;"></p>
+    </div>
   </section>
 
   <!-- Footer -->
@@ -98,11 +115,11 @@
     </div>
   </footer>
 
-  <!-- Image Upload & Prediction Script -->
+  <!-- Upload & Predict Script -->
   <script>
     let uploadedFile = null;
 
-    document.querySelector(".upload-btn").addEventListener("click", () => {
+    document.getElementById("upload-btn").addEventListener("click", () => {
       document.getElementById("upload-input").click();
     });
 
@@ -114,13 +131,13 @@
       reader.onload = function (e) {
         document.getElementById("preview-img").src = e.target.result;
         document.getElementById("preview-container").style.display = "block";
+        document.getElementById("prediction-result").innerHTML = "";
       };
       reader.readAsDataURL(uploadedFile);
     });
 
     document.getElementById("predict-btn").addEventListener("click", async () => {
       if (!uploadedFile) return;
-
       const resultElem = document.getElementById("prediction-result");
       resultElem.innerHTML = "Predicting...";
 
@@ -128,17 +145,10 @@
       formData.append("image", uploadedFile);
 
       try {
-        const response = await fetch("/predict", {
-          method: "POST",
-          body: formData
-        });
-
+        const response = await fetch("/predict", { method: "POST", body: formData });
         const data = await response.json();
         const rawDisease = data.class;
-        const disease = rawDisease
-          .replace(/^Rice_/, 'Rice ')                // Replace prefix
-          .replace(/_/g, ' ')                        // Replace all underscores
-          .replace(/\b\w/g, c => c.toUpperCase());   // Capitalize each word
+        const disease = rawDisease.replace(/^Rice_/, 'Rice ').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
         resultElem.innerHTML = `
           <div style="margin-top: 1em;">
@@ -147,10 +157,8 @@
           </div>
         `;
 
-        // Send raw disease class to chatbot
-        const input = document.getElementById("chat-input");
-        const query = rawDisease;
-        input.value = query;
+        const chatInput = document.getElementById("chat-input");
+        chatInput.value = rawDisease;
         document.getElementById("chat-form").dispatchEvent(new Event("submit"));
 
       } catch (err) {
@@ -160,134 +168,94 @@
     });
   </script>
 
-  <!-- AI Chat Assistant Widget -->
+  <!-- Chat Widget -->
   <div class="chat-widget">
-    <div class="chat-header">
-      <span class="material-icons">AgriPred AI</span>
-      <span class="chat-status">Online</span>
-    </div>
-
+    <div class="chat-header">AgriPred AI <span class="chat-status">Online</span></div>
     <div id="chat-messages" class="chat-body">
       <div class="chat-message model-message">
-        Hello! I'm your agricultural assistant. How can I help with your crops today?
+        Hello! I'm your agricultural assistant. You can upload an image or describe symptoms to start.
       </div>
     </div>
-
     <form id="chat-form" class="chat-form">
       <input type="text" id="chat-input" class="chat-input" placeholder="Type your message..." required />
-      <button type="submit" class="send-btn">
-        <span class="material-icons">Send</span>
-      </button>
+      <button type="submit" class="send-btn">Send</button>
     </form>
   </div>
 
   <!-- Chat Script -->
   <script>
-    const API_KEY = "AIzaSyBjytdifh5zf4n9jHDmkgWWNjRdf3doU5s";
-    const MODEL_NAME = "gemini-1.5-flash";
-
     const chatForm = document.getElementById('chat-form');
     const chatInput = document.getElementById('chat-input');
     const chatMessages = document.getElementById('chat-messages');
 
-    let chatHistory = [
-      {
-        role: "user",
-        parts: [{
-          text:
-    `You are an agricultural assistant. When given a disease name, always reply in this exact format:
-
-    The disease specified is [Disease Name].
-
-    1. Cause: ... 
-    2. Precautions: ... 
-    3. Cure: ... 
-
-    Make sure:
-    - You start with a standalone line: "The disease specified is [Disease Name]."
-    - Each numbered point is on a new line.
-    - Do not merge all points into one line or paragraph.
-    - The response should be 50-60 words, practical, and readable.`
-        }]
-      },
-      {
-        role: "model",
-        parts: [{
-          text: "Understood. I will follow the exact format and line breaks as specified using newline characters."
-        }]
-      }
-    ];
-
-
-    function addMessageToChat(role, text) {
-      const messageDiv = document.createElement('div');
-      messageDiv.classList.add('chat-message', `${role}-message`);
-
-      // Replace *italic* or **bold** formatting with HTML
-      const formatted = text
-        .replace(/\*\*(.*?)\*\*/g, "<b>$1</b>") // remove this if you don't want double asterisks
-        .replace(/\*(.*?)\*/g, "<b>$1</b>")     // bold single-asterisk words like *Bipolaris oryzae*
-        .replace(/\n/g, "<br>");                // preserve line breaks
-
-      messageDiv.innerHTML = formatted;
-      chatMessages.appendChild(messageDiv);
+    function addMessage(role, text) {
+      const div = document.createElement('div');
+      div.classList.add('chat-message', `${role}-message`);
+      div.innerHTML = text.replace(/\n/g, "<br>");
+      chatMessages.appendChild(div);
       chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
-    async function getAIResponse(userMessage) {
-      chatHistory.push({ role: "user", parts: [{ text: userMessage }] });
-
+    async function getAIResponse(userMsg) {
       try {
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: chatHistory,
-              generationConfig: {
-                temperature: 0.7,
-                maxOutputTokens: 1000
-              }
-            })
-          }
-        );
-
-        const data = await response.json();
-
-        if (data.candidates && data.candidates[0] && data.candidates[0].content) {
-          const rawResponse = data.candidates[0].content.parts[0].text;
-          const formattedResponse = rawResponse.replace(/\n/g, "<br>");
-          chatHistory.push({ role: "model", parts: [{ text: rawResponse }] });
-          addMessageToChat('model', formattedResponse);
-        } else {
-          throw new Error('Invalid response from API');
-        }
-      } catch (error) {
-        console.error('API Error:', error);
-        addMessageToChat('model', 'Sorry, I encountered an error. Please try again later.');
+        const res = await fetch(`/chat?message=${encodeURIComponent(userMsg)}`);
+        const data = await res.json();
+        addMessage('model', data.reply || "Sorry, I couldn’t understand that.");
+      } catch {
+        addMessage('model', "Error contacting AI server.");
       }
     }
 
-    chatForm.addEventListener('submit', async (e) => {
+    chatForm.addEventListener('submit', async e => {
       e.preventDefault();
-      const userMessage = chatInput.value.trim();
-      if (userMessage) {
-        addMessageToChat('user', userMessage);
-        chatInput.value = '';
-        chatInput.focus();
-
-        const typingIndicator = document.createElement('div');
-        typingIndicator.classList.add('chat-message', 'model-message', 'typing');
-        typingIndicator.textContent = 'Typing...';
-        chatMessages.appendChild(typingIndicator);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-
-        await getAIResponse(userMessage);
-        chatMessages.removeChild(typingIndicator);
-      }
+      const userMsg = chatInput.value.trim();
+      if (!userMsg) return;
+      addMessage('user', userMsg);
+      chatInput.value = '';
+      addMessage('model', 'Typing...');
+      await getAIResponse(userMsg);
+      chatMessages.lastChild.remove(); // remove typing
     });
   </script>
 
+  <!-- Text Prediction Script -->
+  <script>
+    document.getElementById('text-predict-btn').addEventListener('click', async () => {
+      const text = document.getElementById('symptom-text').value.trim();
+      const out = document.getElementById('text-prediction-result');
+      out.innerHTML = '';
+      if (!text) {
+        out.innerHTML = "<span style='color:#c62828;'>Please describe the symptoms first.</span>";
+        return;
+      }
+      out.innerHTML = "Predicting from symptoms...";
+      try {
+        const resp = await fetch('/predict_text', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ text })
+        });
+        const data = await resp.json();
+        if (data.class && data.class !== 'Unknown') {
+          const readable = data.class.replace(/^Rice_/, 'Rice ').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+          out.innerHTML = `<strong>Disease:</strong> ${readable} (confidence: ${data.confidence}%)`;
+          const chatInput = document.getElementById('chat-input');
+          chatInput.value = data.class;
+          document.getElementById('chat-form').dispatchEvent(new Event('submit'));
+        } else {
+          out.innerHTML = "<span style='color:#c62828;'>No clear match. Try more details.</span>";
+        }
+      } catch {
+        out.innerHTML = "<span style='color:#c62828;'>Error contacting server.</span>";
+      }
+    });
+
+    document.getElementById('text-chat-btn').addEventListener('click', () => {
+      const text = document.getElementById('symptom-text').value.trim();
+      if (!text) return alert("Please describe the symptoms first!");
+      document.getElementById('chat-input').value = text;
+      document.getElementById('chat-form').dispatchEvent(new Event('submit'));
+    });
+  </script>
 </body>
 </html>

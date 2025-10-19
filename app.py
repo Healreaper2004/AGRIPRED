@@ -1,3 +1,4 @@
+# app.py
 from flask import Flask, request, render_template, jsonify
 from flask_cors import CORS
 from PIL import Image
@@ -6,78 +7,131 @@ from torchvision import transforms, models
 import os
 import logging
 from dotenv import load_dotenv
+from werkzeug.utils import secure_filename
 from cures import predefined_cures, ask_gemini_short, ask_gemini_detailed
+from sentence_transformers import SentenceTransformer
+from transformers import VisionEncoderDecoderModel, ViTImageProcessor, AutoTokenizer
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import json
 
-# ✅ App setup
-app = Flask(__name__)
-CORS(app)
-
-# ✅ Logging
-logging.basicConfig(level=logging.INFO)
-
-# ✅ Upload folder
-UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'static', 'uploads')
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png'}
-
-# ✅ Environment variables
+# ----------------- Load environment variables -----------------
 load_dotenv()
 
-# ✅ Device & class names
+# ----------------- Flask setup -----------------
+app = Flask(__name__)
+CORS(app)
+logging.basicConfig(level=logging.INFO)
+
+BASE_DIR = os.path.dirname(__file__)
+UPLOAD_FOLDER = os.path.join(BASE_DIR, "static", "uploads")
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png"}
+
+def allowed_file(filename):
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+# ----------------- Device setup -----------------
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# ----------------- Class labels -----------------
 class_names = [
-    'Rice_bacterial_leaf_blight', 'Rice_bacterial_leaf_streak', 'Rice_bacterial_panicle_blight',
-    'Rice_blast', 'Rice_brown_spot', 'Rice_dead_heart', 'Rice_downy_mildew',
-    'Rice_healthy', 'Rice_hispa', 'Rice_tungro'
+    "Rice_bacterial_leaf_blight", "Rice_bacterial_leaf_streak", "Rice_bacterial_panicle_blight",
+    "Rice_blast", "Rice_brown_spot", "Rice_dead_heart", "Rice_downy_mildew",
+    "Rice_healthy", "Rice_hispa", "Rice_tungro"
 ]
 
-# ✅ Image transform
+# ----------------- Image transform -----------------
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
-    transforms.CenterCrop(224),
     transforms.ToTensor(),
     transforms.Normalize([0.485, 0.456, 0.406],
                          [0.229, 0.224, 0.225])
 ])
 
-# ✅ Load model
-model_path = os.path.join(os.path.dirname(__file__), "model", "paddy_model.pth")
-model = models.resnet18(weights=None)
-model.fc = torch.nn.Sequential(
-    torch.nn.Linear(model.fc.in_features, 256),
-    torch.nn.ReLU(),
-    torch.nn.Dropout(0.4),
-    torch.nn.Linear(256, 10)
-)
+# ----------------- FusionNet model definition -----------------
+class FusionNet(torch.nn.Module):
+    def __init__(self, num_classes):
+        super(FusionNet, self).__init__()
+        base = models.resnet18(pretrained=True)
+        self.image_encoder = torch.nn.Sequential(*list(base.children())[:-1])
+        self.image_fc = torch.nn.Linear(512, 256)
+        self.text_fc = torch.nn.Linear(384, 256)
+        self.classifier = torch.nn.Sequential(
+            torch.nn.ReLU(),
+            torch.nn.Dropout(0.4),
+            torch.nn.Linear(512, 256),
+            torch.nn.ReLU(),
+            torch.nn.Dropout(0.4),
+            torch.nn.Linear(256, num_classes)
+        )
 
-try:
-    model.load_state_dict(torch.load(model_path, map_location=device))
-    model.to(device)
-    model.eval()
-    print("✅ Model loaded")
-except Exception as e:
-    print("❌ Error loading model:", e)
+    def forward(self, img, text_emb):
+        img_feat = self.image_encoder(img).flatten(1)
+        img_feat = self.image_fc(img_feat)
+        txt_feat = self.text_fc(text_emb)
+        fused = torch.cat((img_feat, txt_feat), dim=1)
+        return self.classifier(fused)
 
-# ✅ Helpers
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+# ----------------- Load FusionNet model -----------------
+model_path = os.path.join(BASE_DIR, "model", "fusionnet_paddy_disease.pth")
 
-# ✅ Routes
-@app.route("/", methods=["GET"])
+fusion_model = FusionNet(num_classes=len(class_names)).to(device)
+if os.path.exists(model_path):
+    fusion_model.load_state_dict(torch.load(model_path, map_location=device))
+    fusion_model.eval()
+    logging.info("✅ FusionNet model loaded successfully.")
+else:
+    logging.warning(f"❌ Model not found at {model_path}")
+
+# ----------------- Caption + Text Encoder setup -----------------
+caption_model_id = "nlpconnect/vit-gpt2-image-captioning"
+processor_blip = ViTImageProcessor.from_pretrained(caption_model_id)
+tokenizer_blip = AutoTokenizer.from_pretrained(caption_model_id)
+model_blip = VisionEncoderDecoderModel.from_pretrained(caption_model_id).to(device)
+text_encoder = SentenceTransformer("all-MiniLM-L6-v2", device=device)
+logging.info("✅ Caption generator and text encoder loaded successfully.")
+
+def generate_caption(image_path):
+    """Generate descriptive caption for input image."""
+    image = Image.open(image_path).convert("RGB").resize((224, 224))
+    pixel_values = processor_blip(images=image, return_tensors="pt").pixel_values.to(device)
+    with torch.no_grad():
+        output_ids = model_blip.generate(pixel_values, max_length=40, num_beams=4)
+    caption = tokenizer_blip.decode(output_ids[0], skip_special_tokens=True)
+    return caption.strip().capitalize()
+
+# ----------------- Symptom-based prediction -----------------
+SYMPTOM_DATA = {
+    "Rice_bacterial_leaf_blight": ["yellowing leaves", "water-soaked lesions", "wilting", "brown streaks"],
+    "Rice_blast": ["brown spots", "spindle lesions", "neck rot", "gray centers"],
+    "Rice_tungro": ["yellow-orange leaves", "stunted growth", "mosaic pattern"],
+    "Rice_brown_spot": ["small brown circular spots", "dry lesions", "leaf tip drying"],
+    "Rice_hispa": ["scratched leaves", "white streaks", "insect attack"],
+    "Rice_dead_heart": ["dead tillers", "white central leaves", "stem borer infestation"],
+    "Rice_downy_mildew": ["grayish mold", "white cottony growth", "wilting"],
+    "Rice_bacterial_panicle_blight": ["grain discoloration", "unfilled grains", "panicle drying"],
+    "Rice_bacterial_leaf_streak": ["thin translucent streaks", "sheath infection"],
+    "Rice_healthy": ["green leaves", "no lesions", "healthy plant"]
+}
+
+tfidf = TfidfVectorizer().fit([" ".join(v) for v in SYMPTOM_DATA.values()])
+disease_vectors = tfidf.transform([" ".join(v) for v in SYMPTOM_DATA.values()])
+disease_labels = list(SYMPTOM_DATA.keys())
+
+def predict_disease_from_text(text):
+    vec = tfidf.transform([text])
+    sims = cosine_similarity(vec, disease_vectors)[0]
+    idx = sims.argmax()
+    confidence = float(sims[idx])
+    if confidence < 0.25:
+        return None, confidence
+    return disease_labels[idx], round(confidence * 100, 2)
+
+# ----------------- Flask routes -----------------
+@app.route("/")
 def home():
     return render_template("homepage.html")
-
-@app.route("/about", methods=["GET"])
-def about():
-    return render_template("aboutpage.html")
-
-@app.route("/contact", methods=["GET"])
-def contact():
-    return render_template("contactpage.html")
-
-@app.route("/features", methods=["GET"])
-def features():
-    return render_template("featurepage.html")
 
 @app.route("/ping", methods=["GET"])
 def ping():
@@ -86,60 +140,46 @@ def ping():
 @app.route("/predict", methods=["POST"])
 def predict():
     if "image" not in request.files:
-        return jsonify({"error": "No image part"}), 400
+        return jsonify({"error": "No image uploaded"}), 400
 
     file = request.files["image"]
-    if file.filename == '':
-        return jsonify({"error": "No file selected"}), 400
+    filename = secure_filename(file.filename)
+    if not allowed_file(filename):
+        return jsonify({"error": "Invalid file type"}), 400
 
-    if file and allowed_file(file.filename):
-        filepath = os.path.join(UPLOAD_FOLDER, file.filename)
-        try:
-            print(f"📸 Saving uploaded file to {filepath}")
-            file.save(filepath)
+    filepath = os.path.join(UPLOAD_FOLDER, filename)
+    file.save(filepath)
 
-            image = Image.open(filepath).convert("RGB")
-            print("✅ Image loaded")
+    try:
+        # Generate caption
+        caption = generate_caption(filepath)
+        caption_emb = text_encoder.encode([caption], convert_to_tensor=True).to(device)
 
-            image_tensor = transform(image).unsqueeze(0).to(device)
-            print("✅ Image transformed")
+        # Image tensor
+        image = Image.open(filepath).convert("RGB")
+        image_tensor = transform(image).unsqueeze(0).to(device)
 
-            with torch.no_grad():
-                output = model(image_tensor)
-                probs = torch.nn.functional.softmax(output, dim=1)
-                _, pred = torch.max(probs, 1)
+        with torch.no_grad():
+            output = fusion_model(image_tensor, caption_emb)
+            probs = torch.nn.functional.softmax(output, dim=1)
+            _, pred = torch.max(probs, 1)
 
-            predicted_class = class_names[pred.item()]
-            confidence = round(probs[0][pred.item()].item() * 100, 2)
-            print(f"✅ Prediction: {predicted_class} ({confidence}%)")
+        predicted_class = class_names[pred.item()]
+        confidence = round(probs[0][pred.item()].item() * 100, 2)
+        cure = predefined_cures.get(predicted_class, "No predefined cure found.")
 
-            try:
-                cure = predefined_cures.get(predicted_class)
-                if not isinstance(cure, str):
-                    cure = str(ask_gemini_short(predicted_class))
-            except Exception as ce:
-                print("⚠️ Cure error:", ce)
-                cure = "Cure info unavailable"
+        return jsonify({
+            "class": predicted_class,
+            "confidence": confidence,
+            "caption": caption,
+            "cure": cure,
+            "image_path": filepath
+        })
+    except Exception as e:
+        logging.exception("Prediction error")
+        return jsonify({"error": f"Could not process image: {str(e)}"}), 500
 
-            try:
-                details = str(ask_gemini_detailed(predicted_class))
-            except Exception as de:
-                print("⚠️ Details error:", de)
-                details = "Details not available"
-
-            return jsonify({
-                "class": predicted_class,
-                "confidence": confidence,
-                "cure": cure,
-                "details": details,
-                "image_path": filepath
-            })
-
-        except Exception as e:
-            print("🔥 Prediction error:", e)
-            return jsonify({"error": f"Could not analyze the image: {str(e)}"}), 500
-
-# ✅ Startup block for local/Render with python app.py
+# ----------------- Run -----------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
