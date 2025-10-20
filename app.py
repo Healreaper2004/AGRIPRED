@@ -172,7 +172,7 @@ def predict_text():
 
         return jsonify({
             "class": disease,
-            "confidence": confidence
+            "confidence": confidence    
         })
     except Exception as e:
         logging.exception("Text prediction error")
@@ -214,6 +214,37 @@ def predict():
     except Exception as e:
         logging.exception("Prediction error")
         return jsonify({"error": f"Could not process image: {str(e)}"}), 500
+    
+# ----------------- Chat (AI explanation) route -----------------
+@app.route("/chat", methods=["GET"])
+def chat():
+    try:
+        message = request.args.get("message", "").strip()
+        if not message:
+            return jsonify({"reply": "Please provide a valid message."})
+
+        # ✅ Fallback logic
+        # Try Gemini short explanation first; if it fails, use predefined cures
+        try:
+            reply = ask_gemini_short(message)
+            if not reply or "error" in reply.lower():
+                raise Exception("Gemini not responding")
+        except Exception:
+            # Use fallback cure if Gemini isn't available
+            cure_info = predefined_cures.get(message, None)
+            if cure_info:
+                reply = f"{message.replace('_', ' ').title()} - Recommended Cure:\n{cure_info}"
+            else:
+                reply = (
+                    "Sorry, I couldn’t find a specific cure for that disease. "
+                    "Please provide more details or try uploading an image."
+                )
+
+        return jsonify({"reply": reply})
+    except Exception as e:
+        logging.exception("Chat error")
+        return jsonify({"reply": f"Error: {str(e)}"}), 500
+
 
 # ----------------- Run -----------------
 if __name__ == "__main__":
