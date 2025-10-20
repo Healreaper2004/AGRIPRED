@@ -1,5 +1,5 @@
 flask==3.1.2
-flask-cors==3.0.13
+flask-cors==4.0.1
 gunicorn==23.1.0
 torch==2.9.0
 torchvision==0.24.0
