@@ -4,8 +4,10 @@ services:
     env: python
     plan: starter
     buildCommand: |
+      rm -f /usr/bin/python3
+      ln -s /usr/bin/python3.10 /usr/bin/python3
       echo "python-3.10.13" > runtime.txt
-      cat runtime.txt
+      python3 --version
       pip install --upgrade pip
       pip install -r requirements.txt
     startCommand: python app.py
