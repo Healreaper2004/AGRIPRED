@@ -5,5 +5,7 @@ services:
     plan: starter
     buildCommand: |
       echo "python-3.10.13" > runtime.txt
+      cat runtime.txt
+      pip install --upgrade pip
       pip install -r requirements.txt
     startCommand: python app.py
