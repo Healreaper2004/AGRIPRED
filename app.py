@@ -1,4 +1,4 @@
-# app.py
+# app.py — Option A (Render 512MB minimal memory)
 from flask import Flask, request, render_template, jsonify
 from flask_cors import CORS
 from PIL import Image
@@ -10,10 +10,10 @@ from dotenv import load_dotenv
 from werkzeug.utils import secure_filename
 from cures import predefined_cures, ask_gemini_short, ask_gemini_detailed
 from sentence_transformers import SentenceTransformer
-from transformers import VisionEncoderDecoderModel, ViTImageProcessor, AutoTokenizer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import json
+import random
 
 # ----------------- Load environment variables -----------------
 load_dotenv()
@@ -31,8 +31,10 @@ ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png"}
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# ----------------- Device setup -----------------
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# ----------------- CPU-only setup -----------------
+device = torch.device("cpu")
+torch.set_num_threads(1)
+logging.info("✅ Using CPU-only mode for memory optimization.")
 
 # ----------------- Class labels -----------------
 class_names = [
@@ -53,7 +55,7 @@ transform = transforms.Compose([
 class FusionNet(torch.nn.Module):
     def __init__(self, num_classes):
         super(FusionNet, self).__init__()
-        base = models.resnet18(pretrained=True)
+        base = models.resnet18(pretrained=False)  # avoids 45MB ImageNet weights
         self.image_encoder = torch.nn.Sequential(*list(base.children())[:-1])
         self.image_fc = torch.nn.Linear(512, 256)
         self.text_fc = torch.nn.Linear(384, 256)
@@ -73,35 +75,40 @@ class FusionNet(torch.nn.Module):
         fused = torch.cat((img_feat, txt_feat), dim=1)
         return self.classifier(fused)
 
-# ----------------- Load FusionNet model -----------------
+# ----------------- Load FusionNet weights -----------------
 model_path = os.path.join(BASE_DIR, "model", "fusionnet_paddy_disease.pth")
-
 fusion_model = FusionNet(num_classes=len(class_names)).to(device)
 if os.path.exists(model_path):
-    fusion_model.load_state_dict(torch.load(model_path, map_location=device))
-    fusion_model.eval()
-    logging.info("✅ FusionNet model loaded successfully.")
+    try:
+        fusion_model.load_state_dict(torch.load(model_path, map_location=device))
+        logging.info("✅ FusionNet weights loaded successfully.")
+    except RuntimeError as e:
+        logging.warning(f"⚠️ Non-strict load due to mismatch: {e}")
+        fusion_model.load_state_dict(torch.load(model_path, map_location=device), strict=False)
 else:
     logging.warning(f"❌ Model not found at {model_path}")
 
-# ----------------- Caption + Text Encoder setup -----------------
-caption_model_id = "nlpconnect/vit-gpt2-image-captioning"
-processor_blip = ViTImageProcessor.from_pretrained(caption_model_id)
-tokenizer_blip = AutoTokenizer.from_pretrained(caption_model_id)
-model_blip = VisionEncoderDecoderModel.from_pretrained(caption_model_id).to(device)
-text_encoder = SentenceTransformer("all-MiniLM-L6-v2", device=device)
-logging.info("✅ Caption generator and text encoder loaded successfully.")
+fusion_model.eval()
+torch.set_grad_enabled(False)
 
+# ----------------- Lightweight caption fallback -----------------
 def generate_caption(image_path):
-    """Generate descriptive caption for input image."""
-    image = Image.open(image_path).convert("RGB").resize((224, 224))
-    pixel_values = processor_blip(images=image, return_tensors="pt").pixel_values.to(device)
-    with torch.no_grad():
-        output_ids = model_blip.generate(pixel_values, max_length=40, num_beams=4)
-    caption = tokenizer_blip.decode(output_ids[0], skip_special_tokens=True)
-    return caption.strip().capitalize()
+    """Tiny pseudo-caption generator (no transformers)."""
+    captions = [
+        "A close-up of a rice leaf showing texture",
+        "A rice plant leaf with visible markings",
+        "Rice crop leaf sample for disease detection",
+        "A healthy or infected rice leaf image",
+        "Rice leaf under natural light condition"
+    ]
+    caption = random.choice(captions)
+    return caption
 
-# ----------------- Symptom-based prediction -----------------
+# ----------------- Text encoder (small) -----------------
+text_encoder = SentenceTransformer("paraphrase-MiniLM-L3-v2", device=device)
+logging.info("✅ Loaded lightweight sentence-transformer.")
+
+# ----------------- Symptom-based fallback model -----------------
 SYMPTOM_DATA = {
     "Rice_bacterial_leaf_blight": ["yellowing leaves", "water-soaked lesions", "wilting", "brown streaks"],
     "Rice_blast": ["brown spots", "spindle lesions", "neck rot", "gray centers"],
@@ -141,21 +148,17 @@ def ping():
 def predict():
     if "image" not in request.files:
         return jsonify({"error": "No image uploaded"}), 400
-
     file = request.files["image"]
     filename = secure_filename(file.filename)
     if not allowed_file(filename):
         return jsonify({"error": "Invalid file type"}), 400
-
     filepath = os.path.join(UPLOAD_FOLDER, filename)
     file.save(filepath)
 
     try:
-        # Generate caption
         caption = generate_caption(filepath)
         caption_emb = text_encoder.encode([caption], convert_to_tensor=True).to(device)
 
-        # Image tensor
         image = Image.open(filepath).convert("RGB")
         image_tensor = transform(image).unsqueeze(0).to(device)
 
@@ -173,7 +176,6 @@ def predict():
             "confidence": confidence,
             "caption": caption,
             "cure": cure,
-            "image_path": filepath
         })
     except Exception as e:
         logging.exception("Prediction error")
