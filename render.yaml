@@ -3,5 +3,7 @@ services:
     name: agripred
     env: python
     plan: starter
-    buildCommand: pip install -r requirements.txt
+    buildCommand: |
+      echo "python-3.10.13" > runtime.txt
+      pip install -r requirements.txt
     startCommand: python app.py
