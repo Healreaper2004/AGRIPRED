@@ -157,6 +157,27 @@ def contact():
 def ping():
     return jsonify({"status": "ok"})
 
+@app.route("/predict_text", methods=["POST"])
+def predict_text():
+    try:
+        data = request.get_json()
+        text = data.get("text", "").strip()
+
+        if not text:
+            return jsonify({"error": "No text provided"}), 400
+
+        disease, confidence = predict_disease_from_text(text)
+        if not disease:
+            return jsonify({"class": "Unknown", "confidence": round(confidence * 100, 2)})
+
+        return jsonify({
+            "class": disease,
+            "confidence": confidence
+        })
+    except Exception as e:
+        logging.exception("Text prediction error")
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/predict", methods=["POST"])
 def predict():
     if "image" not in request.files:
