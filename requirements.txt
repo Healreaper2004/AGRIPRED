@@ -1,9 +1,10 @@
-flask
-flask-cors
 torch
 torchvision
-Pillow
-requests
+flask
+flask-cors
 scikit-learn
 python-dotenv
-gunicorn
+Pillow
+transformers
+sentence-transformers
+huggingface-hub
