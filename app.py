@@ -105,7 +105,7 @@ def generate_caption(image_path):
     return caption
 
 # ----------------- Text encoder (small) -----------------
-text_encoder = SentenceTransformer("paraphrase-MiniLM-L3-v2", device=device)
+text_encoder = SentenceTransformer(os.path.join("model", "paraphrase-MiniLM-L3-v2"), device=device)
 logging.info("✅ Loaded lightweight sentence-transformer.")
 
 # ----------------- Symptom-based fallback model -----------------
