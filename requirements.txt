@@ -8,5 +8,5 @@ sentence-transformers==2.2.2
 scikit-learn==1.4.2
 python-dotenv==1.0.1
 requests==2.31.0
-huggingface-hub==0.13.4
+huggingface-hub==0.22.2
 tokenizers==0.15.2
