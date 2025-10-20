@@ -140,6 +140,19 @@ def predict_disease_from_text(text):
 def home():
     return render_template("homepage.html")
 
+# ----------------- Additional Informational Routes -----------------
+@app.route("/about")
+def about():
+    return render_template("aboutpage.html")
+
+@app.route("/features")
+def features():
+    return render_template("featurepage.html")
+
+@app.route("/contact")
+def contact():
+    return render_template("contactpage.html")
+
 @app.route("/ping", methods=["GET"])
 def ping():
     return jsonify({"status": "ok"})
