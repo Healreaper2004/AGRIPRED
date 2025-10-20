@@ -3,5 +3,11 @@ services:
     name: agripred
     env: python
     plan: starter
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --workers 1 --threads 1 --timeout 300
+    buildCommand: |
+      sudo apt-get update
+      sudo apt-get install -y build-essential python3.10 python3.10-venv python3.10-dev
+      python3.10 -m venv venv
+      . venv/bin/activate
+      pip install --upgrade pip
+      pip install -r requirements.txt
+    startCommand: venv/bin/gunicorn app:app --workers 1 --threads 1 --timeout 300
