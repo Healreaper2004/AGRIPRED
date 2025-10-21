@@ -66,35 +66,35 @@ predefined_cures = {
 # Internal helper to call Gemini (if API key present)
 def _query_gemini(prompt: str, max_tokens: int = 200) -> str:
     if not BASE_URL:
-        return "Gemini API key not configured. Install GEMINI_API_KEY to enable online responses."
+        return "Google API key not configured. Please add GOOGLE_API_KEY in environment variables."
 
     body = {
-        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "contents": [
+            {
+                "parts": [{"text": prompt}]
+            }
+        ],
         "generationConfig": {
             "temperature": 0.4,
-            "topK": 40,
-            "topP": 0.9,
             "maxOutputTokens": max_tokens
         }
     }
 
     try:
-        resp = requests.post(BASE_URL, headers={"Content-Type": "application/json"}, json=body, timeout=20)
+        resp = requests.post(BASE_URL, headers={"Content-Type": "application/json"}, json=body, timeout=25)
         resp.raise_for_status()
         data = resp.json()
+
+        # ✅ Correct Gemini v1 structure
         candidates = data.get("candidates", [])
-        if candidates:
-            content = candidates[0].get("content", {})
-            # content might be dict with "parts"
-            parts = content.get("parts") if isinstance(content, dict) else None
-            if parts and isinstance(parts, list) and len(parts) > 0:
-                return parts[0].get("text", "").strip()
-        # fallback: try top-level text fields
-        if isinstance(data, dict):
-            txt = data.get("text") or data.get("content") or None
-            if isinstance(txt, str) and txt.strip():
-                return txt.strip()
-        return "No textual response received from Gemini."
+        if candidates and "content" in candidates[0]:
+            parts = candidates[0]["content"].get("parts", [])
+            if parts and "text" in parts[0]:
+                return parts[0]["text"].strip()
+
+        # fallback for weird responses
+        return data.get("text", "No valid response from Gemini.").strip()
+
     except requests.exceptions.RequestException as e:
         return f"Network error contacting Gemini: {e}"
     except Exception as e:
