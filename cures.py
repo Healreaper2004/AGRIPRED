@@ -3,7 +3,7 @@ import os
 import requests
 
 # API key from env (no hard-coded key)
-API_KEY = os.getenv("GEMINI_API_KEY")
+API_KEY = os.getenv("GOOGLE_API_KEY")
 MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
 BASE_URL = None
 if API_KEY:
