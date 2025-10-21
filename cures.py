@@ -1,16 +1,16 @@
-# cures.py
 import os
 import requests
 
-# API key from env (no hard-coded key)
+# ✅ Load Gemini / Google API key and model
 API_KEY = os.getenv("GOOGLE_API_KEY")
 MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+
+# ✅ Gemini v1 endpoint
 BASE_URL = None
 if API_KEY:
-    # Stable v1 style endpoint for generativelanguage (example)
     BASE_URL = f"https://generativelanguage.googleapis.com/v1/models/{MODEL_NAME}:generateContent?key={API_KEY}"
 
-# Predefined short cures for classes
+# ✅ Predefined fallback cures
 predefined_cures = {
     "Rice_healthy": (
         "Rice_healthy is not a disease. Your crop is in good condition. "
@@ -63,17 +63,14 @@ predefined_cures = {
     )
 }
 
-# Internal helper to call Gemini (if API key present)
+
+# ✅ Helper to call Gemini API
 def _query_gemini(prompt: str, max_tokens: int = 200) -> str:
     if not BASE_URL:
-        return "Google API key not configured. Please add GOOGLE_API_KEY in environment variables."
+        return "Google API key not configured. Please set GOOGLE_API_KEY in Render environment."
 
     body = {
-        "contents": [
-            {
-                "parts": [{"text": prompt}]
-            }
-        ],
+        "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
             "temperature": 0.4,
             "maxOutputTokens": max_tokens
@@ -81,26 +78,33 @@ def _query_gemini(prompt: str, max_tokens: int = 200) -> str:
     }
 
     try:
-        resp = requests.post(BASE_URL, headers={"Content-Type": "application/json"}, json=body, timeout=25)
+        resp = requests.post(
+            BASE_URL,
+            headers={"Content-Type": "application/json"},
+            json=body,
+            timeout=20
+        )
         resp.raise_for_status()
         data = resp.json()
 
-        # ✅ Correct Gemini v1 structure
+        # ✅ Gemini v1 response format
         candidates = data.get("candidates", [])
         if candidates and "content" in candidates[0]:
             parts = candidates[0]["content"].get("parts", [])
             if parts and "text" in parts[0]:
                 return parts[0]["text"].strip()
 
-        # fallback for weird responses
-        return data.get("text", "No valid response from Gemini.").strip()
+        # fallback if response unexpected
+        return "No valid response received from Gemini."
+    except requests.exceptions.RequestException:
+        return "Unable to connect to Gemini API at the moment. Please try again later."
+    except Exception:
+        return "Unexpected error occurred while contacting Gemini API."
 
-    except requests.exceptions.RequestException as e:
-        return f"Network error contacting Gemini: {e}"
-    except Exception as e:
-        return f"Unexpected error contacting Gemini: {e}"
 
+# ✅ Functions used by app.py
 def ask_gemini_short(disease_name: str) -> str:
+    """Short version for chat — quick treatment summary."""
     if disease_name in predefined_cures:
         return predefined_cures[disease_name]
     prompt = (
@@ -109,7 +113,9 @@ def ask_gemini_short(disease_name: str) -> str:
     )
     return _query_gemini(prompt, max_tokens=150)
 
+
 def ask_gemini_detailed(disease_name: str) -> str:
+    """Detailed version — used for longer AI explanations."""
     prompt = (
         f"The disease specified is {disease_name}.\n\n"
         "1. Cause: Explain the fungal, bacterial, or viral cause (mention organism where possible).\n"
@@ -118,7 +124,8 @@ def ask_gemini_detailed(disease_name: str) -> str:
     )
     return _query_gemini(prompt, max_tokens=250)
 
-# Quick test when run as script
+
+# ✅ Quick test (optional, for local testing only)
 if __name__ == "__main__":
     test = "Rice_blast"
     print("Short:", ask_gemini_short(test))
