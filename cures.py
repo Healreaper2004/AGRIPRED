@@ -64,19 +64,22 @@ predefined_cures = {
 }
 
 
-# ✅ Helper to call Gemini API
+# ✅ Gemini v1 query function
 def _query_gemini(prompt: str, max_tokens: int = 200) -> str:
-    API_KEY = os.getenv("GOOGLE_API_KEY")
-    MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-    BASE_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent"
-
-    if not API_KEY:
+    if not BASE_URL:
         return "Google API key not configured. Please set GOOGLE_API_KEY."
 
     body = {
-        "contents": [{"parts": [{"text": prompt}]}],
+        "contents": [
+            {
+                "role": "user",
+                "parts": [{"text": prompt}]
+            }
+        ],
         "generationConfig": {
             "temperature": 0.4,
+            "topK": 40,
+            "topP": 0.9,
             "maxOutputTokens": max_tokens
         }
     }
@@ -84,29 +87,31 @@ def _query_gemini(prompt: str, max_tokens: int = 200) -> str:
     try:
         resp = requests.post(
             BASE_URL,
-            headers={
-                "Content-Type": "application/json",
-                "X-goog-api-key": API_KEY
-            },
+            headers={"Content-Type": "application/json"},
             json=body,
             timeout=25
         )
         resp.raise_for_status()
         data = resp.json()
 
+        # ✅ Extract text from response
         candidates = data.get("candidates", [])
-        if candidates and "content" in candidates[0]:
-            parts = candidates[0]["content"].get("parts", [])
+        if candidates:
+            content = candidates[0].get("content", {})
+            parts = content.get("parts", [])
             if parts and "text" in parts[0]:
                 return parts[0]["text"].strip()
 
+        # fallback
         return "No valid response received from Gemini."
+
     except requests.exceptions.RequestException as e:
         return f"Network error contacting Gemini: {e}"
     except Exception as e:
         return f"Unexpected error contacting Gemini: {e}"
 
-# ✅ Functions used by app.py
+
+# ✅ Short and detailed versions for use in app.py
 def ask_gemini_short(disease_name: str) -> str:
     """Short version for chat — quick treatment summary."""
     if disease_name in predefined_cures:
@@ -129,7 +134,7 @@ def ask_gemini_detailed(disease_name: str) -> str:
     return _query_gemini(prompt, max_tokens=250)
 
 
-# ✅ Quick test (optional, for local testing only)
+# ✅ Local test (optional)
 if __name__ == "__main__":
     test = "Rice_blast"
     print("Short:", ask_gemini_short(test))
