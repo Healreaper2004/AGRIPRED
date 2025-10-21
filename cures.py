@@ -66,8 +66,12 @@ predefined_cures = {
 
 # ✅ Helper to call Gemini API
 def _query_gemini(prompt: str, max_tokens: int = 200) -> str:
-    if not BASE_URL:
-        return "Google API key not configured. Please set GOOGLE_API_KEY in Render environment."
+    API_KEY = os.getenv("GOOGLE_API_KEY")
+    MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    BASE_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent"
+
+    if not API_KEY:
+        return "Google API key not configured. Please set GOOGLE_API_KEY."
 
     body = {
         "contents": [{"parts": [{"text": prompt}]}],
@@ -80,27 +84,27 @@ def _query_gemini(prompt: str, max_tokens: int = 200) -> str:
     try:
         resp = requests.post(
             BASE_URL,
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                "X-goog-api-key": API_KEY
+            },
             json=body,
-            timeout=20
+            timeout=25
         )
         resp.raise_for_status()
         data = resp.json()
 
-        # ✅ Gemini v1 response format
         candidates = data.get("candidates", [])
         if candidates and "content" in candidates[0]:
             parts = candidates[0]["content"].get("parts", [])
             if parts and "text" in parts[0]:
                 return parts[0]["text"].strip()
 
-        # fallback if response unexpected
         return "No valid response received from Gemini."
-    except requests.exceptions.RequestException:
-        return "Unable to connect to Gemini API at the moment. Please try again later."
-    except Exception:
-        return "Unexpected error occurred while contacting Gemini API."
-
+    except requests.exceptions.RequestException as e:
+        return f"Network error contacting Gemini: {e}"
+    except Exception as e:
+        return f"Unexpected error contacting Gemini: {e}"
 
 # ✅ Functions used by app.py
 def ask_gemini_short(disease_name: str) -> str:
