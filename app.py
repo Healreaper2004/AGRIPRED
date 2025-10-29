@@ -14,6 +14,8 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import json
 import random
+from pymongo import MongoClient
+import base64
 
 # ----------------- Load environment variables -----------------
 load_dotenv()
