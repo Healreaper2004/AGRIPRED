@@ -1,5 +1,4 @@
-# app.py — AgriPred AI (Render Production Version)
-
+# app.py — Option A (Render 512MB minimal memory)
 from flask import Flask, request, render_template, jsonify
 from flask_cors import CORS
 from PIL import Image
@@ -13,10 +12,17 @@ from cures import predefined_cures, ask_gemini_short, ask_gemini_detailed
 from sentence_transformers import SentenceTransformer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+import json
 import random
 
 # ----------------- Load environment variables -----------------
 load_dotenv()
+
+# ✅ MongoDB connection
+mongo_uri = os.getenv("MONGO_URI")
+mongo_client = MongoClient(mongo_uri)
+db = mongo_client["agripredDB"]
+predictions_col = db["predictions"]
 
 # ----------------- Flask setup -----------------
 app = Flask(__name__)
@@ -28,10 +34,8 @@ UPLOAD_FOLDER = os.path.join(BASE_DIR, "static", "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png"}
 
-
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
-
 
 # ----------------- CPU-only setup -----------------
 device = torch.device("cpu")
@@ -57,7 +61,7 @@ transform = transforms.Compose([
 class FusionNet(torch.nn.Module):
     def __init__(self, num_classes):
         super(FusionNet, self).__init__()
-        base = models.resnet18(pretrained=False)  # avoids 45MB ImageNet weights
+        base = models.resnet18(pretrained=False)
         self.image_encoder = torch.nn.Sequential(*list(base.children())[:-1])
         self.image_fc = torch.nn.Linear(512, 256)
         self.text_fc = torch.nn.Linear(384, 256)
@@ -76,7 +80,6 @@ class FusionNet(torch.nn.Module):
         txt_feat = self.text_fc(text_emb)
         fused = torch.cat((img_feat, txt_feat), dim=1)
         return self.classifier(fused)
-
 
 # ----------------- Load FusionNet weights -----------------
 model_path = os.path.join(BASE_DIR, "model", "fusionnet_paddy_disease.pth")
@@ -98,13 +101,13 @@ torch.set_grad_enabled(False)
 def generate_caption(image_path):
     """Tiny pseudo-caption generator (no transformers)."""
     captions = [
-        "A close-up of a rice leaf showing texture",
         "A rice plant leaf with visible markings",
         "Rice crop leaf sample for disease detection",
         "A healthy or infected rice leaf image",
         "Rice leaf under natural light condition"
     ]
-    return random.choice(captions)
+    caption = random.choice(captions)
+    return caption
 
 # ----------------- Text encoder (small) -----------------
 text_encoder = SentenceTransformer(os.path.join("model", "paraphrase-MiniLM-L3-v2"), device=device)
@@ -128,78 +131,71 @@ tfidf = TfidfVectorizer().fit([" ".join(v) for v in SYMPTOM_DATA.values()])
 disease_vectors = tfidf.transform([" ".join(v) for v in SYMPTOM_DATA.values()])
 disease_labels = list(SYMPTOM_DATA.keys())
 
-
 def predict_disease_from_text(text):
     vec = tfidf.transform([text])
     sims = cosine_similarity(vec, disease_vectors)[0]
     idx = sims.argmax()
-    confidence = float(sims[idx])
-    if confidence < 0.25:
-        return None, confidence
-    return disease_labels[idx], round(confidence * 100, 2)
-
+    conf = float(sims[idx])
+    if conf < 0.25:
+        return None, conf
+    return disease_labels[idx], round(conf * 100, 2)
 
 # ----------------- Flask routes -----------------
 @app.route("/")
 def home():
     return render_template("homepage.html")
 
-
+# ----------------- Additional Informational Routes -----------------
 @app.route("/about")
 def about():
     return render_template("aboutpage.html")
-
 
 @app.route("/features")
 def features():
     return render_template("featurepage.html")
 
-
 @app.route("/contact")
 def contact():
     return render_template("contactpage.html")
 
-
 @app.route("/ping", methods=["GET"])
 def ping():
     return jsonify({"status": "ok"})
-
 
 @app.route("/predict_text", methods=["POST"])
 def predict_text():
     try:
         data = request.get_json()
         text = data.get("text", "").strip()
-        if not text:
-            return jsonify({"error": "No text provided"}), 400
         disease, confidence = predict_disease_from_text(text)
-        if not disease:
-            return jsonify({"class": "Unknown", "confidence": round(confidence * 100, 2)})
-        return jsonify({
-            "class": disease,
+
+        # ✅ Save to DB
+        predictions_col.insert_one({
+            "type": "text",
+            "input": text,
+            "disease": disease,
             "confidence": confidence
         })
+
+        return jsonify({"class": disease, "confidence": confidence})
     except Exception as e:
         logging.exception("Text prediction error")
         return jsonify({"error": str(e)}), 500
 
-
 @app.route("/predict", methods=["POST"])
 def predict():
-    if "image" not in request.files:
-        return jsonify({"error": "No image uploaded"}), 400
-
-    file = request.files["image"]
-    filename = secure_filename(file.filename)
-    if not allowed_file(filename):
-        return jsonify({"error": "Invalid file type"}), 400
-
-    filepath = os.path.join(UPLOAD_FOLDER, filename)
-    file.save(filepath)
-
     try:
+        if "image" not in request.files:
+            return jsonify({"error": "No image uploaded"}), 400
+        
+        file = request.files["image"]
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(UPLOAD_FOLDER, filename)
+        file.save(filepath)
+
         caption = generate_caption(filepath)
         caption_emb = text_encoder.encode([caption], convert_to_tensor=True).to(device)
+        
         image = Image.open(filepath).convert("RGB")
         image_tensor = transform(image).unsqueeze(0).to(device)
 
@@ -212,17 +208,32 @@ def predict():
         confidence = round(probs[0][pred.item()].item() * 100, 2)
         cure = predefined_cures.get(predicted_class, "No predefined cure found.")
 
+        # ✅ Save to DB (store image as Base64)
+        with open(filepath, "rb") as f:
+            image_data = base64.b64encode(f.read()).decode("utf-8")
+
+        predictions_col.insert_one({
+            "type": "image",
+            "filename": filename,
+            "disease": predicted_class,
+            "confidence": confidence,
+            "caption": caption,
+            "cure": cure,
+            "image": image_data
+        })
+
         return jsonify({
             "class": predicted_class,
             "confidence": confidence,
             "caption": caption,
-            "cure": cure,
+            "cure": cure
         })
+
     except Exception as e:
         logging.exception("Prediction error")
-        return jsonify({"error": f"Could not process image: {str(e)}"}), 500
-
-
+        return jsonify({"error": str(e)}), 500
+    
+# ----------------- Chat (AI explanation) route -----------------
 @app.route("/chat", methods=["GET"])
 def chat():
     try:
@@ -230,11 +241,14 @@ def chat():
         if not message:
             return jsonify({"reply": "Please provide a valid message."})
 
+        # ✅ Fallback logic
+        # Try Gemini short explanation first; if it fails, use predefined cures
         try:
             reply = ask_gemini_short(message)
             if not reply or "error" in reply.lower():
                 raise Exception("Gemini not responding")
         except Exception:
+            # Use fallback cure if Gemini isn't available
             cure_info = predefined_cures.get(message, None)
             if cure_info:
                 reply = f"{message.replace('_', ' ').title()} - Recommended Cure:\n{cure_info}"
@@ -248,6 +262,12 @@ def chat():
     except Exception as e:
         logging.exception("Chat error")
         return jsonify({"reply": f"Error: {str(e)}"}), 500
+    
+# ✅ History API
+@app.route("/history", methods=["GET"])
+def history():
+    results = list(predictions_col.find({}, {"_id": 0}))
+    return jsonify({"history": results})
 
 
 # ----------------- Run -----------------
