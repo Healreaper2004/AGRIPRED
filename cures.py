@@ -70,12 +70,7 @@ def _query_gemini(prompt: str, max_tokens: int = 200) -> str:
         return "Google API key not configured. Please set GOOGLE_API_KEY."
 
     body = {
-        "contents": [
-            {
-                "role": "user",
-                "parts": [{"text": prompt}]
-            }
-        ],
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {
             "temperature": 0.4,
             "topK": 40,
@@ -85,31 +80,37 @@ def _query_gemini(prompt: str, max_tokens: int = 200) -> str:
     }
 
     try:
+        print(f"[Gemini Debug] Sending prompt: {prompt[:80]}...")
         resp = requests.post(
             BASE_URL,
             headers={"Content-Type": "application/json"},
             json=body,
             timeout=25
         )
-        resp.raise_for_status()
-        data = resp.json()
 
-        # ✅ Extract text from response
+        if resp.status_code != 200:
+            print(f"[Gemini Error] Status {resp.status_code}: {resp.text}")
+            return f"Gemini API Error ({resp.status_code})"
+
+        data = resp.json()
         candidates = data.get("candidates", [])
         if candidates:
             content = candidates[0].get("content", {})
             parts = content.get("parts", [])
-            if parts and "text" in parts[0]:
-                return parts[0]["text"].strip()
+            for part in parts:
+                if "text" in part:
+                    return part["text"].strip()
 
-        # fallback
+        print(f"[Gemini Debug] No text in candidates. Raw: {data}")
         return "No valid response received from Gemini."
 
     except requests.exceptions.RequestException as e:
+        print(f"[Gemini Network Error] {e}")
         return f"Network error contacting Gemini: {e}"
-    except Exception as e:
-        return f"Unexpected error contacting Gemini: {e}"
 
+    except Exception as e:
+        print(f"[Gemini Unexpected Error] {e}")
+        return f"Unexpected error contacting Gemini: {e}"
 
 # ✅ Short and detailed versions for use in app.py
 def ask_gemini_short(disease_name: str) -> str:

@@ -247,26 +247,26 @@ def chat():
         if not message:
             return jsonify({"reply": "Please provide a valid message."})
 
-        # ✅ Fallback logic
-        # Try Gemini short explanation first; if it fails, use predefined cures
-        try:
-            reply = ask_gemini_short(message)
-            if not reply or "error" in reply.lower():
-                raise Exception("Gemini not responding")
-        except Exception:
-            # Use fallback cure if Gemini isn't available
+        print(f"[Chatbot] Received: {message}")
+
+        reply = ask_gemini_short(message)
+
+        if not reply or "error" in reply.lower() or "No valid" in reply:
+            print("[Chatbot] Gemini failed, switching to fallback...")
             cure_info = predefined_cures.get(message, None)
             if cure_info:
                 reply = f"{message.replace('_', ' ').title()} - Recommended Cure:\n{cure_info}"
             else:
                 reply = (
-                    "Sorry, I couldn’t find a specific cure for that disease. "
-                    "Please provide more details or try uploading an image."
+                    "I'm sorry, but I couldn't fetch the treatment details from Gemini AI. "
+                    "Please describe your symptoms more clearly or upload an image."
                 )
 
+        print(f"[Chatbot] Reply: {reply[:100]}...")
         return jsonify({"reply": reply})
+
     except Exception as e:
-        logging.exception("Chat error")
+        print(f"[Chatbot Error] {e}")
         return jsonify({"reply": f"Error: {str(e)}"}), 500
     
 # ✅ History API
