@@ -200,7 +200,7 @@ def predict():
         file.save(filepath)
 
         caption = generate_caption(filepath)
-        caption_emb = text_encoder.encode([caption], convert_to_tensor=True).to(device)
+        caption_emb = text_encoder.encode([caption], convert_to_tensor=True).unsqueeze(0).to(device)
         
         image = Image.open(filepath).convert("RGB")
         image_tensor = transform(image).unsqueeze(0).to(device)
