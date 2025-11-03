@@ -249,7 +249,25 @@ def chat():
 
         print(f"[Chatbot] Received: {message}")
 
-        reply = ask_gemini_short(message)
+        # Timeout protection
+        import signal
+
+        class TimeoutException(Exception):
+            pass
+
+        def timeout_handler(signum, frame):
+            raise TimeoutException("Gemini call timed out")
+
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(20)  # 20-second timeout max
+
+        try:
+            reply = ask_gemini_short(message)
+        except TimeoutException:
+            print("[Chatbot] Gemini timeout, using fallback.")
+            reply = None
+        finally:
+            signal.alarm(0)
 
         if not reply or "error" in reply.lower() or "No valid" in reply:
             print("[Chatbot] Gemini failed, switching to fallback...")
@@ -266,8 +284,10 @@ def chat():
         return jsonify({"reply": reply})
 
     except Exception as e:
+        import traceback
         print(f"[Chatbot Error] {e}")
-        return jsonify({"reply": f"Error: {str(e)}"}), 500
+        traceback.print_exc()
+        return jsonify({"reply": f"Server Error: {str(e)}"}), 500
     
 # ✅ History API
 @app.route("/history", methods=["GET"])
