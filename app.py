@@ -28,6 +28,10 @@ predictions_col = db["predictions"]
 
 # ----------------- Flask setup -----------------
 app = Flask(__name__)
+app.config["DEBUG"] = True
+app.config["TEMPLATES_AUTO_RELOAD"] = True
+import sys
+logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 CORS(app)
 logging.basicConfig(level=logging.INFO)
 
