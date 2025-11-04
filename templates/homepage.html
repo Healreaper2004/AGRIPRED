@@ -199,10 +199,17 @@
     async function getAIResponse(userMsg) {
       try {
         const res = await fetch(`/chat?message=${encodeURIComponent(userMsg)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        addMessage('model', data.reply || "Sorry, I couldn’t understand that.");
-      } catch {
-        addMessage('model', "Error contacting AI server.");
+
+        if (data.reply) {
+          addMessage('model', data.reply.replace(/\n/g, "<br>"));
+        } else {
+          addMessage('model', "No reply received from server.");
+        }
+      } catch (err) {
+        console.error("Chat error:", err);
+        addMessage('model', "Error contacting AI server. Please check console logs.");
       }
     }
 
@@ -210,11 +217,19 @@
       e.preventDefault();
       const userMsg = chatInput.value.trim();
       if (!userMsg) return;
+
       addMessage('user', userMsg);
       chatInput.value = '';
-      addMessage('model', 'Typing...');
+
+      const typingElem = document.createElement('div');
+      typingElem.classList.add('chat-message', 'model-message');
+      typingElem.innerHTML = '<em>Typing...</em>';
+      chatMessages.appendChild(typingElem);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+
       await getAIResponse(userMsg);
-      chatMessages.lastChild.remove(); // remove typing
+
+      typingElem.remove();
     });
   </script>
 

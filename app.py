@@ -266,37 +266,39 @@ def chat():
     try:
         message = request.args.get("message", "").strip()
         if not message:
-            return jsonify({"reply": "Please provide a valid message."})
+            return jsonify({"reply": "Please provide a valid message."}), 400
 
-        print(f"[Chatbot] Received: {message}")
+        logging.info(f"[Chatbot] Received: {message}")
 
-        # ✅ If Gemini key missing, instantly fallback
+        # ✅ If Gemini key missing
         if not os.getenv("GOOGLE_API_KEY"):
             cure_info = predefined_cures.get(message, None)
-            if cure_info:
-                return jsonify({"reply": f"{message.replace('_', ' ').title()} - Recommended Cure:\n{cure_info}"})
-            else:
-                return jsonify({
-                    "reply": "AI mode is offline, but you can upload an image or describe symptoms for detection."
-                })
+            reply = (
+                f"{message.replace('_', ' ').title()} - Recommended Cure:\n{cure_info}"
+                if cure_info
+                else "AI mode offline — try image or text prediction instead."
+            )
+            return jsonify({"reply": reply})
 
-        # ✅ Otherwise try Gemini (safe)
-        reply = ask_gemini_short(message)
-        if not reply or "error" in reply.lower() or "No valid" in reply:
-            print("[Chatbot] Gemini failed, switching to fallback...")
+        # ✅ Try Gemini safely
+        try:
+            reply = ask_gemini_short(message)
+            if not reply or "error" in reply.lower():
+                raise ValueError("Gemini returned invalid output.")
+        except Exception as ai_error:
+            logging.warning(f"[Chatbot] Gemini failed: {ai_error}")
             cure_info = predefined_cures.get(message, None)
-            if cure_info:
-                reply = f"{message.replace('_', ' ').title()} - Recommended Cure:\n{cure_info}"
-            else:
-                reply = "Could not get Gemini response. Please try text or image input."
+            reply = (
+                f"{message.replace('_', ' ').title()} - Recommended Cure:\n{cure_info}"
+                if cure_info
+                else "AI assistant temporarily unavailable. Try again later."
+            )
 
-        print(f"[Chatbot] Reply: {reply[:100]}...")
+        logging.info(f"[Chatbot] Reply: {reply[:100]}")
         return jsonify({"reply": reply})
 
     except Exception as e:
-        import traceback
-        print(f"[Chatbot Error] {e}")
-        traceback.print_exc()
+        logging.exception("Chatbot route failed")
         return jsonify({"reply": f"Server Error: {str(e)}"}), 500
     
 # ✅ History API
