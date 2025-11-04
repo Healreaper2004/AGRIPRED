@@ -193,31 +193,49 @@ def predict():
     try:
         if "image" not in request.files:
             return jsonify({"error": "No image uploaded"}), 400
-        
+
         file = request.files["image"]
         filename = secure_filename(file.filename)
         filepath = os.path.join(UPLOAD_FOLDER, filename)
         file.save(filepath)
 
+        # ✅ Generate caption
         caption = generate_caption(filepath)
+
+        # ✅ Text embedding (safe)
         caption_emb = text_encoder.encode(caption, convert_to_tensor=True)
         if caption_emb.dim() == 1:
             caption_emb = caption_emb.unsqueeze(0)
         caption_emb = caption_emb.to(device)
-        
+
+        # ✅ Image preprocessing
         image = Image.open(filepath).convert("RGB")
         image_tensor = transform(image).unsqueeze(0).to(device)
 
-        with torch.no_grad():
-            output = fusion_model(image_tensor, caption_emb)
-            probs = torch.nn.functional.softmax(output, dim=1)
-            _, pred = torch.max(probs, 1)
+        # ✅ Try model prediction
+        try:
+            with torch.no_grad():
+                output = fusion_model(image_tensor, caption_emb)
+                probs = torch.nn.functional.softmax(output, dim=1)
+                _, pred = torch.max(probs, 1)
 
-        predicted_class = class_names[pred.item()]
-        confidence = round(probs[0][pred.item()].item() * 100, 2)
-        cure = predefined_cures.get(predicted_class, "No predefined cure found.")
+            predicted_class = class_names[pred.item()]
+            confidence = round(probs[0][pred.item()].item() * 100, 2)
+            cure = predefined_cures.get(predicted_class, "No predefined cure found.")
+            logging.info(f"[FusionNet] ✅ {filename} → {predicted_class} ({confidence}%)")
 
-        # ✅ Save to DB (store image as Base64)
+        except Exception as model_error:
+            logging.warning(f"[Fallback] FusionNet failed: {model_error}")
+
+            # 🔁 Fallback: use text symptom similarity
+            predicted_class, confidence = predict_disease_from_text(caption)
+            if not predicted_class:
+                predicted_class = "Rice_healthy"
+                confidence = 50.0
+            cure = predefined_cures.get(predicted_class, "General crop care: Maintain balanced fertilizer and drainage.")
+            logging.info(f"[Fallback] Used text similarity → {predicted_class} ({confidence}%)")
+
+        # ✅ Save image + metadata to MongoDB
         with open(filepath, "rb") as f:
             image_data = base64.b64encode(f.read()).decode("utf-8")
 
@@ -239,8 +257,8 @@ def predict():
         })
 
     except Exception as e:
-        logging.exception("Prediction error")
-        return jsonify({"error": str(e)}), 500
+        logging.exception("❌ Fatal prediction error")
+        return jsonify({"class": "Unknown", "confidence": 0, "error": str(e)}), 500
     
 # ----------------- Chat (AI explanation) route -----------------
 @app.route("/chat", methods=["GET"])
