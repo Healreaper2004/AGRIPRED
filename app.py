@@ -200,7 +200,7 @@ def predict():
         file.save(filepath)
 
         caption = generate_caption(filepath)
-        caption_emb = text_encoder.encode([caption], convert_to_tensor=True).unsqueeze(0).to(device)
+        caption_emb = text_encoder.encode([caption], convert_to_tensor=True).to(device)
         
         image = Image.open(filepath).convert("RGB")
         image_tensor = transform(image).unsqueeze(0).to(device)
@@ -249,36 +249,25 @@ def chat():
 
         print(f"[Chatbot] Received: {message}")
 
-        # Timeout protection
-        import signal
+        # ✅ If Gemini key missing, instantly fallback
+        if not os.getenv("GOOGLE_API_KEY"):
+            cure_info = predefined_cures.get(message, None)
+            if cure_info:
+                return jsonify({"reply": f"{message.replace('_', ' ').title()} - Recommended Cure:\n{cure_info}"})
+            else:
+                return jsonify({
+                    "reply": "AI mode is offline, but you can upload an image or describe symptoms for detection."
+                })
 
-        class TimeoutException(Exception):
-            pass
-
-        def timeout_handler(signum, frame):
-            raise TimeoutException("Gemini call timed out")
-
-        signal.signal(signal.SIGALRM, timeout_handler)
-        signal.alarm(20)  # 20-second timeout max
-
-        try:
-            reply = ask_gemini_short(message)
-        except TimeoutException:
-            print("[Chatbot] Gemini timeout, using fallback.")
-            reply = None
-        finally:
-            signal.alarm(0)
-
+        # ✅ Otherwise try Gemini (safe)
+        reply = ask_gemini_short(message)
         if not reply or "error" in reply.lower() or "No valid" in reply:
             print("[Chatbot] Gemini failed, switching to fallback...")
             cure_info = predefined_cures.get(message, None)
             if cure_info:
                 reply = f"{message.replace('_', ' ').title()} - Recommended Cure:\n{cure_info}"
             else:
-                reply = (
-                    "I'm sorry, but I couldn't fetch the treatment details from Gemini AI. "
-                    "Please describe your symptoms more clearly or upload an image."
-                )
+                reply = "Could not get Gemini response. Please try text or image input."
 
         print(f"[Chatbot] Reply: {reply[:100]}...")
         return jsonify({"reply": reply})
